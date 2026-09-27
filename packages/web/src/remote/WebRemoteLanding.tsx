@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from "react";
-import { AppErrorBoundary, Root, ZCodeIntlProvider } from "@zcode/ui";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { AppErrorBoundary, Root, ZCodeIntlProvider, useZCodeSessionStore } from "@zcode/ui";
 import "@zcode/ui/styles.css";
 import type { IPlatformService } from "@zcode/shared";
+import { ChevronLeft } from "lucide-react";
 import {
   WebRemoteRelayClient,
   type WebRemoteRelayState,
@@ -9,22 +10,74 @@ import {
 } from "./webRemoteRelay.js";
 import type { WebRemoteControlParams } from "./remoteParams.js";
 import type { IServiceAccessor } from "@zcode/services";
+import {
+  WebRemoteMobileHome,
+  type MobileWorkspaceItem,
+  type MobileTaskItem,
+} from "./WebRemoteMobileHome.js";
 
 interface WebRemoteLandingProps {
   params: WebRemoteControlParams;
   platform: IPlatformService;
 }
 
+function checkIsMobileViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(max-width: 768px)").matches ||
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  );
+}
+
 export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
   const [relayState, setRelayState] = useState<WebRemoteRelayState>("connecting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(checkIsMobileViewport);
+  const [mobilePage, setMobilePage] = useState<"home" | "chat">(() => {
+    return checkIsMobileViewport() ? "home" : "chat";
+  });
+
   const [bridgeResult, setBridgeResult] = useState<{
     services: IServiceAccessor;
     bridge: WorkspaceBridgeInfo;
     initialTaskId?: string;
   } | null>(null);
 
+  const [workspaces, setWorkspaces] = useState<MobileWorkspaceItem[]>([]);
+  const [tasks, setTasks] = useState<MobileTaskItem[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>(undefined);
+  const [selectedWorkspace, setSelectedWorkspace] = useState<MobileWorkspaceItem | null>(null);
+
   const clientRef = useRef<WebRemoteRelayClient | null>(null);
+
+  // 监听视口变化自适应移动端与桌面端
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(max-width: 768px)");
+    const handler = () => {
+      setIsMobile(checkIsMobileViewport());
+    };
+    mql.addEventListener("change", handler);
+    window.addEventListener("resize", handler);
+    return () => {
+      mql.removeEventListener("change", handler);
+      window.removeEventListener("resize", handler);
+    };
+  }, []);
+
+  // 监听 popstate 处理手机端系统返回键
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handlePopState = (e: PopStateEvent) => {
+      if (!e.state || e.state.zcodeMobilePage !== "chat") {
+        setMobilePage("home");
+      } else {
+        setMobilePage("chat");
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     document.title = `ZCode - Remote: ${params.deviceName ?? "Desktop"}`;
@@ -38,6 +91,17 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
       }
     });
 
+    const appSub = client.onAppPayload((payload: any) => {
+      if (payload?.zcode_type === "workspace-list-updated" && payload.result) {
+        if (Array.isArray(payload.result.workspaces)) {
+          setWorkspaces(payload.result.workspaces);
+        }
+        if (Array.isArray(payload.result.tasks)) {
+          setTasks(payload.result.tasks);
+        }
+      }
+    });
+
     client.connect().catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg);
@@ -45,6 +109,7 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
 
     return () => {
       sub.dispose();
+      appSub.dispose();
       client.dispose();
     };
   }, [params]);
@@ -58,7 +123,11 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
         15000,
       );
 
-      const workspaces = bootstrapResp.result?.workspaces ?? [];
+      const rawWorkspaces: MobileWorkspaceItem[] = bootstrapResp.result?.workspaces ?? [];
+      const rawTasks: MobileTaskItem[] = bootstrapResp.result?.tasks ?? [];
+      setWorkspaces(rawWorkspaces);
+      setTasks(rawTasks);
+
       const activeWorkspaceKey =
         bootstrapResp.result?.mobileViewState?.activeWorkspaceKey ??
         bootstrapResp.result?.initialViewState?.activeWorkspaceKey;
@@ -70,18 +139,21 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
 
       const primaryWorkspace =
         (activeWorkspaceKey
-          ? workspaces.find(
-              (w: any) => (w.workspaceIdentity?.trim() || w.workspacePath) === activeWorkspaceKey,
+          ? rawWorkspaces.find(
+              (w) => (w.workspaceIdentity?.trim() || w.workspacePath) === activeWorkspaceKey,
             )
           : null) ??
-        workspaces.find(
-          (w: any) => w.kind !== "remote" || (w.workspaceIdentity && w.remoteSessionId),
+        rawWorkspaces.find(
+          (w) => w.kind !== "remote" || (w.workspaceIdentity && (w as any).remoteSessionId),
         ) ??
-        workspaces[0];
+        rawWorkspaces[0];
 
       if (!primaryWorkspace) {
         throw new Error("桌面端当前没有可供远控打开的工作区。");
       }
+
+      setSelectedWorkspace(primaryWorkspace);
+      setSelectedTaskId(activeTaskId);
 
       const workspaceKey =
         primaryWorkspace.workspaceIdentity?.trim() || primaryWorkspace.workspacePath;
@@ -93,6 +165,16 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
         ...bridgeConn,
         initialTaskId: activeTaskId ?? bridgeConn.bridge.initialTaskId,
       });
+
+      if (activeTaskId) {
+        useZCodeSessionStore
+          .getState()
+          .setActiveTaskId(
+            bridgeConn.bridge.workspacePath,
+            activeTaskId,
+            bridgeConn.bridge.workspaceIdentity,
+          );
+      }
     } catch (err) {
       console.error("[web-remote] bridge setup failed:", err);
       setErrorMessage(
@@ -100,6 +182,37 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
       );
     }
   }
+
+  // 手机端在首页选择任务后进入聊天页面
+  const handleSelectTaskOnMobile = useCallback((ws: MobileWorkspaceItem, taskId: string) => {
+    setSelectedWorkspace(ws);
+    setSelectedTaskId(taskId);
+    useZCodeSessionStore.getState().setActiveTaskId(ws.workspacePath, taskId, ws.workspaceIdentity);
+    setMobilePage("chat");
+    if (typeof window !== "undefined") {
+      window.history.pushState({ zcodeMobilePage: "chat" }, "");
+    }
+  }, []);
+
+  const handleBackHome = useCallback(() => {
+    setMobilePage("home");
+    if (typeof window !== "undefined" && window.history.state?.zcodeMobilePage === "chat") {
+      window.history.back();
+    }
+  }, []);
+
+  const handleEnterActiveChat = useCallback(() => {
+    setMobilePage("chat");
+    if (typeof window !== "undefined") {
+      window.history.pushState({ zcodeMobilePage: "chat" }, "");
+    }
+  }, []);
+
+  const currentTaskTitle = useMemo(() => {
+    if (!selectedTaskId) return null;
+    const found = tasks.find((t) => t.taskId === selectedTaskId);
+    return found?.title || selectedTaskId;
+  }, [selectedTaskId, tasks]);
 
   if (errorMessage) {
     return (
@@ -155,26 +268,93 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
         settingService={services.settingService}
         broadcastService={services.broadcastService}
       >
-        <Root
-          services={services}
-          platform={platform}
-          initialWorkspaceAbsPath={bridge.workspacePath}
-          initialWorkspaceIdentity={bridge.kind === "remote" ? bridge.workspaceIdentity : undefined}
-          initialTaskId={bridgeResult.initialTaskId ?? bridge.initialTaskId}
-          initialWorkspaceLoadingFallback={
-            <div className="flex h-screen w-screen flex-col items-center justify-center bg-background text-foreground">
-              <div className="flex flex-col items-center gap-3">
-                <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                <span className="text-ui-xs text-foreground-subtle">正在进入工作区...</span>
-              </div>
+        {isMobile && mobilePage === "home" ? (
+          <WebRemoteMobileHome
+            workspaces={workspaces}
+            tasks={tasks}
+            activeWorkspacePath={selectedWorkspace?.workspacePath ?? bridge.workspacePath}
+            activeTaskId={selectedTaskId ?? bridgeResult.initialTaskId}
+            onSelectTask={handleSelectTaskOnMobile}
+            onEnterActiveChat={handleEnterActiveChat}
+            deviceName={params.deviceName}
+          />
+        ) : (
+          <div
+            className="relative flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground"
+            data-mobile-remote-chat={isMobile ? "true" : undefined}
+          >
+            {/* 移动端沉浸式会话顶栏 */}
+            {isMobile && (
+              <header className="flex h-11 shrink-0 items-center justify-between border-b border-border bg-header px-3 shadow-xs">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 rounded-lg py-1 px-1.5 text-ui-xs font-medium text-foreground hover:bg-surface-hover active:scale-95"
+                  onClick={handleBackHome}
+                >
+                  <ChevronLeft className="size-4.5 text-primary" />
+                  <span className="text-primary font-medium">任务首页</span>
+                </button>
+                <div className="min-w-0 max-w-[55%] truncate text-center text-ui-xs font-semibold text-foreground">
+                  {currentTaskTitle || "任务会话"}
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="inline-flex size-2 rounded-full bg-emerald-500" title="已连接" />
+                </div>
+              </header>
+            )}
+
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <Root
+                services={services}
+                platform={platform}
+                initialWorkspaceAbsPath={selectedWorkspace?.workspacePath ?? bridge.workspacePath}
+                initialWorkspaceIdentity={
+                  selectedWorkspace?.kind === "remote"
+                    ? selectedWorkspace.workspaceIdentity
+                    : bridge.kind === "remote"
+                      ? bridge.workspaceIdentity
+                      : undefined
+                }
+                initialTaskId={selectedTaskId ?? bridgeResult.initialTaskId ?? bridge.initialTaskId}
+                initialWorkspaceLoadingFallback={
+                  <div className="flex h-screen w-screen flex-col items-center justify-center bg-background text-foreground">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      <span className="text-ui-xs text-foreground-subtle">正在进入工作区...</span>
+                    </div>
+                  </div>
+                }
+                restoreSession={true}
+                allowOpenWorkspace={false}
+                preferDirectoryBrowser
+                supportsEmbeddedBrowser={false}
+                allowRemoteWorkspace={false}
+              />
             </div>
-          }
-          restoreSession={true}
-          allowOpenWorkspace={false}
-          preferDirectoryBrowser
-          supportsEmbeddedBrowser={false}
-          allowRemoteWorkspace={false}
-        />
+
+            {/* 移动端专属样式覆盖：在手机端隐藏 PC 侧栏及把手，让 Chat 全屏沉浸 */}
+            {isMobile && (
+              <style>{`
+                [data-mobile-remote-chat="true"] [data-workspace-sidebar-panel="true"],
+                [data-mobile-remote-chat="true"] [data-panel-resize-handle],
+                [data-mobile-remote-chat="true"] [role="separator"],
+                [data-mobile-remote-chat="true"] [data-workspace-shell="true"] > [data-panel=""]:first-child {
+                  display: none !important;
+                  width: 0 !important;
+                  min-width: 0 !important;
+                  max-width: 0 !important;
+                  flex: 0 0 0px !important;
+                }
+                [data-mobile-remote-chat="true"] [data-workspace-body="true"],
+                [data-mobile-remote-chat="true"] [data-workspace-shell="true"] > div:last-child {
+                  width: 100% !important;
+                  flex: 1 1 100% !important;
+                  max-width: 100% !important;
+                }
+              `}</style>
+            )}
+          </div>
+        )}
       </ZCodeIntlProvider>
     </AppErrorBoundary>
   );

@@ -38,6 +38,7 @@ export {
   unregisterRemoteWorkspaceSession,
   useRemoteWorkspaceSessionStore,
 } from "./store/remoteWorkspaceSessionStore.js";
+export { useZCodeSessionStore } from "./store/zcodeSessionStore.js";
 export {
   REMOTE_WORKSPACE_DISCONNECTED_ERROR_CODE,
   createRemoteWorkspaceDisconnectedError,
