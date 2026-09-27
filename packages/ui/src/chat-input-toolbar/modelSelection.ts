@@ -23,8 +23,6 @@ function resolveModelValueDisplayLabel(value: string): string {
 export function resolveModelSelectTriggerDisplay(
   normalizedValue: string,
   modelGroups: readonly ModelSelectGroup[],
-  showManageModelsAction: boolean,
-  manageModelsLabel?: string,
   options?: {
     allowUnavailableCustomModelPlaceholder?: boolean;
     allowUnavailableModelPlaceholder?: boolean;
@@ -47,8 +45,9 @@ export function resolveModelSelectTriggerDisplay(
       placeholder: resolveModelValueDisplayLabel(normalizedValue),
     };
   }
-  if (modelGroups.length === 0 && showManageModelsAction) {
-    return { value: undefined, placeholder: manageModelsLabel };
-  }
+  // 修复：候选列表为空时触发器曾显示「管理模型」。动作文案被当成状态标签后，
+  // 无凭据部署（如官方 Web）的用户会把待选择状态误读成管理动作，也无法与
+  // 「已选模型失效」区分。「管理模型」只保留为菜单项（见 docs/ui/composer-model-selection.md），
+  // 触发器统一回落到调用方的默认「选择模型」文案。
   return { value: undefined, placeholder: undefined };
 }

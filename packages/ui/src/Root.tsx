@@ -650,7 +650,12 @@ function RootInner({
     // 系统右键/Service 冷启动传入 initialWorkspacePath 时，必须先恢复历史 tabs，
     // 再把目标 workspace 合并并激活。否则先 addTab 会被 restoreTabs 整体替换掉；
     // 直接禁用 restoreSession 又会让其他 workspace 全部消失。
-    canBootstrapInitialWorkspace: canRestoreWorkspaceSession && hasCompletedInitialRestore,
+    // 修复：非桌面（Web 远控/网页端）在进入 Root 前已有独立配对与工作区解析流程，
+    // 若继续等待桌面宿主的本地 OAuth 恢复门禁，会导致 canBootstrapInitialWorkspace 永远为 false，
+    // 初始工作区 Tab 无法注入并卡在加载界面。这里在非桌面环境且具备 initialWorkspaceAbsPath 时直接放行。
+    canBootstrapInitialWorkspace:
+      (!isDesktop && Boolean(initialWorkspaceAbsPath)) ||
+      (canRestoreWorkspaceSession && hasCompletedInitialRestore),
     addTab,
     setIsBootstrappingInitialWorkspace,
     platform,

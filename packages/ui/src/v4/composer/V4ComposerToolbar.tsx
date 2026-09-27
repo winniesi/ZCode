@@ -783,14 +783,8 @@ function V4ComposerModelControlsImpl({
   // 不在可选组（失效/下线/退登）→ 回落占位/默认「选择模型」，不直显协议内部占位符或失效
   // 模型 id。复用存活的 resolveModelSelectTriggerDisplay。
   const triggerDisplay = useMemo(
-    () =>
-      resolveModelSelectTriggerDisplay(
-        rawModelValue,
-        modelSelectGroups,
-        showManageModelsAction,
-        manageModelsLabel,
-      ),
-    [manageModelsLabel, modelSelectGroups, rawModelValue, showManageModelsAction],
+    () => resolveModelSelectTriggerDisplay(rawModelValue, modelSelectGroups),
+    [modelSelectGroups, rawModelValue],
   );
   const normalizedModelValue = triggerDisplay.value ?? "";
 

@@ -30,6 +30,8 @@ import {
 } from "./share/conversationShareRoute.js";
 import type { IPlatformService, RemoteTarget, ServerRemoteInfo } from "@zcode/shared";
 import { WEB_DEFAULT_THEME, resolveWebInitialTheme } from "./webThemeSeed.js";
+import { isWebRemoteControlPath, parseWebRemoteControlParams } from "./remote/remoteParams.js";
+import { WebRemoteLanding } from "./remote/WebRemoteLanding.js";
 
 function resolveWebThemePreference(defaultTheme: Theme = WEB_DEFAULT_THEME): Theme {
   const saved = localStorage.getItem("zcode-theme");
@@ -431,6 +433,19 @@ async function bootstrapWebApp() {
 
   if (isConversationSharePath(window.location.pathname)) {
     await renderConversationSharePage();
+    return;
+  }
+
+  if (isWebRemoteControlPath(window.location.pathname, params)) {
+    const remoteParams = parseWebRemoteControlParams(params);
+    if (!remoteParams) {
+      renderWebBootstrapError(
+        new Error("无效的 Web 远程控制链接：缺少必要的 sid, hash 或时间戳参数。"),
+      );
+      return;
+    }
+    const platform = createWebPlatform();
+    root.render(<WebRemoteLanding params={remoteParams} platform={platform} />);
     return;
   }
 

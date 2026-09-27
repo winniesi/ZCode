@@ -75,6 +75,47 @@ This starts both the Web development server (default: `http://localhost:5173`) a
 
 After changing Agent source code, run `pnpm --filter @zcode/cli... build` and restart the service. To validate the complete distribution, extract and run it as described under Packaging → ZCode CLI distribution below.
 
+### Web Remote Control & Deployment
+
+The Web client (`packages/web`) supports Web remote control communication with the desktop ZCode client (compatible with `/remote/v4` and associated query parameters), allowing you to securely connect to your active desktop workspace from any browser:
+
+- **Relay Connection**: Connects to the relay server via secure HMAC-SHA256 signature challenge-response and bridges to the desktop host.
+- **Session & Task Synchronization**: Automatically activates the current desktop task and conversation, restoring multi-workspace projects and historical tasks.
+- **Model Selection Parity**: Features a built-in fallback model selection view, ensuring the model trigger remains selectable without falling back to "Manage Models".
+
+#### Build & Deployment
+
+Deploy the Web client using any modern static hosting service (such as Vercel, Cloudflare Pages, or Netlify):
+
+```bash
+# Build Web client
+pnpm --filter @zcode/web build
+```
+
+The output bundle is generated in `packages/web/dist`.
+
+For **Vercel** deployment, an out-of-the-box `vercel.json` SPA configuration is provided:
+
+```bash
+# Deploy to preview
+vercel
+
+# Deploy to production
+vercel --prod
+```
+
+#### Remote Control Usage
+
+1. Enable "Web Remote Control" in your desktop ZCode to obtain the remote URL (or QR code).
+2. Copy the URL, which follows this format:
+   ```text
+   https://<domain>/remote/v4?sid=<device_sid>&hash=<pass_hash>&t=<timestamp>&mid=<device_mid>&name=<device_name>&app_version=<version>
+   ```
+3. Replace the domain with your deployed Web domain and open it in any desktop or mobile browser:
+   ```text
+   https://<your-deployed-domain>/remote/v4?sid=<device_sid>&hash=<pass_hash>&t=<timestamp>&mid=<device_mid>&name=<device_name>&app_version=<version>
+   ```
+
 ### ZCode CLI distribution
 
 The command-line distribution includes the TUI, Web client, and Agent behind one `zcode` command. With no arguments it starts the TUI; a leading `--web` starts Web mode; all other arguments go to the existing Agent CLI. Both modes run locally without Electron.

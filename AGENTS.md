@@ -18,6 +18,7 @@
 | 格式检查         | `pnpm fmt:check`                          |
 | 桌面开发         | `pnpm dev:desktop`                        |
 | Web 开发         | `pnpm dev:web`                            |
+| Web 服务单独开发 | `pnpm dev:server`                         |
 | 提交前检查       | `pnpm verify:pre-push`（Lint 与架构检查） |
 | 架构检查         | `pnpm architecture:check --changed`       |
 | 模块阅读包       | `pnpm architecture:context <module-id>`   |
@@ -27,7 +28,7 @@
 测试入口以目标包当前的 `package.json` 和实际测试文件为准，不假定存在统一的单测或 E2E 命令。
 
 - `packages/desktop`：Electron main、host、renderer。
-- `packages/web`、`packages/server`：Web 客户端与服务端。
+- `packages/web`：Web 薄入口壳（详见「Web 端要点」）；`packages/server`：Hono + node-pty 服务端，HTTP/WS 默认端口 3030（`PORT` 可覆盖）。
 - `packages/ui`：共享 React 组件、hooks 与 Zustand store。
 - `packages/services`：业务服务；`packages/rpc`：RPC 框架。
 - `packages/shared`：共享协议与类型；`packages/client`：Agent 客户端 SDK。
@@ -53,6 +54,17 @@
 - 通过依赖注入处理 Desktop、Web、本地和远程环境的差异，并兼顾 Windows、macOS 和 Linux。
 - Zustand 状态位于 `packages/ui/src/store/`。广播同步的主题、语言等字段需要防止回环；UI 局部状态不应被误当作服务端事实。
 - hooks 中含 JSX 的文件使用 `.tsx`。
+
+## Web 端要点
+
+当前工作重点是改造 zcode 网页端：改动优先落在 `packages/ui`（共享 UI）与 `packages/server`，保持 `packages/web` 入口壳薄。
+
+- `packages/web` 只承载启动分流与平台差异实现（Vite + React）；业务 UI 逻辑放 `packages/ui`，不在 web 包内重复实现。
+- `packages/web/src/main.tsx` 按路径分流三类入口：主应用（`connectViaWebSocket` + 共享 `Root`）、OAuth 回调页（`src/auth/`）、会话分享落地页（`src/share/`；`/share` 英文、`/cn/share` 中文，默认浅色主题）。
+- Web 能力面由 main.tsx 的 `createWebPlatform()` 实现 `IPlatformService`，桌面专属能力显式 no-op 或拒绝；接口新增方法必须同步补齐 Web fallback，否则根级 `pnpm typecheck` 直接失败。
+- Web 经 WebSocket 连接 `packages/server`（默认端口 3030）。`pnpm dev:web` 同时起两端（Vite 端口 5173），`/ws`、`/api` 由 Vite 代理到 3030；`/api/v1/oauth/token` 代理到线上同源接口，必须排在 `/api` 通配代理之前。
+- 链接常量（endpoint origin、OAuth client_id）经 Vite `define` 注入；浏览器侧新代码读 `VITE_ZCODE_BASE_URL`（旧名 `VITE_ZCODE_ENDPOINT_ORIGIN` 仅兼容保留），secret/token 不得通过 `VITE_` 前缀进入浏览器产物。
+- 分享页本地调试可设 `VITE_CONVERSATION_SHARE_PREVIEW_MOCK=true` 走 mock client；Vite 在消费方声明 `@` → `packages/ui/src` 别名（`packages/web/vite.config.ts`），UI 包源码不能假设该别名由包自身提供。
 
 ## 进程、协议与远程控制
 

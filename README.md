@@ -11,8 +11,6 @@
   简体中文 | <a href="README.en.md">English</a>
 </p>
 
-
-
 ZCode 是 AI 编程工作台，提供桌面应用、浏览器界面和终端 Agent。本仓库包含客户端、后端服务、共享 UI，以及 Agent CLI 与运行时源码。
 
 ## 更新
@@ -80,6 +78,47 @@ ZCODE_SERVER_WORKSPACE=/path/to/project pnpm dev:web
 该命令同时启动 Web 开发服务器（默认 `http://localhost:5173`）和后端（默认 `http://localhost:3030`）；浏览器访问前者。`/ws` 和一般 `/api` 请求代理到本地后端，`/api/v1/oauth/token` 单独代理到当前配置的产品服务。
 
 Agent 源码修改后，执行 `pnpm --filter @zcode/cli... build` 并重启服务。需要验证完整发行包时，按下方“ZCode 命令行版”打包章节解压运行。
+
+### Web 远程控制与 Vercel 部署
+
+网页端（`packages/web`）现已支持与桌面端 ZCode 进行 Web 远程控制通信（兼容 `/remote/v4` 及相关参数），可以在浏览器中安全连接运行中的桌面端工作区：
+
+- **远控中继连接**：根据链接参数通过安全 HMAC-SHA256 签名握手直连中继服务器并桥接桌面端服务。
+- **历史记录与会话同步**：进入后自动激活桌面端当前任务与对话，同步恢复桌面端的多工作区项目列表与历史会话，支持在浏览器中自由切换项目与任务。
+- **模型选择优化**：内置模型选择服务兜底保护，修复了远控连接下模型触发器回落至「管理模型」的问题，确保模型列表与选择器可正常使用。
+
+#### 本地构建与部署
+
+可以使用静态页面托管平台（如 Vercel、Cloudflare Pages、Netlify 等）或静态 Web 服务器部署网页端：
+
+```bash
+# 构建 Web 产物
+pnpm --filter @zcode/web build
+```
+
+构建生成的产物位于 `packages/web/dist`。
+
+若使用 **Vercel** 部署，仓库根目录已提供开箱即用的 `vercel.json` 单页应用（SPA）重写配置，可在仓库根目录执行：
+
+```bash
+# 部署至 Vercel 预览环境
+vercel
+
+# 部署至 Vercel 生产环境
+vercel --prod
+```
+
+#### 远控使用方法
+
+1. 在桌面端 ZCode 中开启「Web 远程控制」功能，获取远控链接（或扫描二维码得到的 URL）。
+2. 复制链接，其格式通常如下：
+   ```text
+   https://<domain>/remote/v4?sid=<device_sid>&hash=<pass_hash>&t=<timestamp>&mid=<device_mid>&name=<device_name>&app_version=<version>
+   ```
+3. 将域名替换为您自己部署的 Web 域名，在任意移动端或桌面端现代浏览器中打开即可安全连接并操作桌面端：
+   ```text
+   https://<your-deployed-domain>/remote/v4?sid=<device_sid>&hash=<pass_hash>&t=<timestamp>&mid=<device_mid>&name=<device_name>&app_version=<version>
+   ```
 
 ### ZCode 命令行版
 

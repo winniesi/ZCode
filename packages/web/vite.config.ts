@@ -94,8 +94,7 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_ZAI_OAUTH_ORIGIN": JSON.stringify(zaiOAuthOrigin),
     },
     build: {
-      // 生产不在浏览器产物暴露 sourceMappingURL，避免客户端侧还原业务源码。
-      sourcemap: mode === "production" ? "hidden" : true,
+      sourcemap: false,
     },
   };
 });
