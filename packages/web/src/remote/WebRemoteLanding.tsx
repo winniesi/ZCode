@@ -280,7 +280,7 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
           />
         ) : (
           <div
-            className="relative flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground"
+            className="relative flex h-dvh w-screen flex-col overflow-hidden bg-background text-foreground"
             data-mobile-remote-chat={isMobile ? "true" : undefined}
           >
             {/* 移动端沉浸式会话顶栏 */}
@@ -294,10 +294,10 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
                   <ChevronLeft className="size-4.5 text-primary" />
                   <span className="text-primary font-medium">任务首页</span>
                 </button>
-                <div className="min-w-0 max-w-[55%] truncate text-center text-ui-xs font-semibold text-foreground">
+                <div className="min-w-0 max-w-[60%] truncate text-center text-ui-xs font-semibold text-foreground">
                   {currentTaskTitle || "任务会话"}
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   <span className="inline-flex size-2 rounded-full bg-emerald-500" title="已连接" />
                 </div>
               </header>
@@ -332,9 +332,15 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
               />
             </div>
 
-            {/* 移动端专属样式覆盖：在手机端隐藏 PC 侧栏及把手，让 Chat 全屏沉浸 */}
+            {/* 移动端专属样式覆盖：在手机端隐藏 PC 侧栏及把手，消除双 Header 重叠，让 Chat 全屏沉浸且底部吸底 */}
             {isMobile && (
               <style>{`
+                [data-mobile-remote-chat="true"] [data-desktop-window-frame="true"] {
+                  height: 100% !important;
+                  max-height: 100% !important;
+                  border: none !important;
+                  border-radius: 0 !important;
+                }
                 [data-mobile-remote-chat="true"] [data-workspace-sidebar-panel="true"],
                 [data-mobile-remote-chat="true"] [data-panel-resize-handle],
                 [data-mobile-remote-chat="true"] [role="separator"],
@@ -345,11 +351,33 @@ export function WebRemoteLanding({ params, platform }: WebRemoteLandingProps) {
                   max-width: 0 !important;
                   flex: 0 0 0px !important;
                 }
+                [data-mobile-remote-chat="true"] header[data-testid="workspace-header"],
+                [data-mobile-remote-chat="true"] header[data-testid="app-header"],
+                [data-mobile-remote-chat="true"] .\\@container\\/workspace-header,
+                [data-mobile-remote-chat="true"] .\\@container\\/topoverlayer,
+                [data-mobile-remote-chat="true"] [data-testid="desktop-top-nav-back"],
+                [data-mobile-remote-chat="true"] sectionheader,
+                [data-mobile-remote-chat="true"] [data-workspace-header="true"],
+                [data-mobile-remote-chat="true"] [data-desktop-window-frame="true"] > header {
+                  display: none !important;
+                  height: 0 !important;
+                  min-height: 0 !important;
+                  max-height: 0 !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  border: none !important;
+                  overflow: hidden !important;
+                  pointer-events: none !important;
+                }
                 [data-mobile-remote-chat="true"] [data-workspace-body="true"],
                 [data-mobile-remote-chat="true"] [data-workspace-shell="true"] > div:last-child {
                   width: 100% !important;
                   flex: 1 1 100% !important;
                   max-width: 100% !important;
+                }
+                [data-mobile-remote-chat="true"] form {
+                  max-width: 100% !important;
+                  margin-bottom: 0.5rem !important;
                 }
               `}</style>
             )}
